@@ -8,7 +8,7 @@ from tkinter import *
 import numpy as np
 from numpy.linalg import norm
 
-half_pi = pi / 2
+half_pi = pi/2
 implementation = input("Enter tt, ax or t: \n")
 
 class Arm:
@@ -340,8 +340,8 @@ arm = Arm(93, 87, 139, Arm.default_optimization, implementation)
 
 fig = plt.figure()
 ax = Axes3D(fig)
-
 plt.ion()
+
 x = 150
 y = 150
 z = 150
@@ -356,7 +356,6 @@ sz = Scale(root, from_=0, to_=300, orient=HORIZONTAL, length=600, command=lambda
 sx.bind('<ButtonRelease-1>', callback)
 sy.bind('<ButtonRelease-1>', callback)
 sz.bind('<ButtonRelease-1>', callback)
-
 sx.set(150)
 sy.set(150)
 sz.set(150)
