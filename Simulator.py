@@ -11,9 +11,11 @@ from numpy.linalg import norm
 half_pi = pi / 2
 implementation = input("Enter tt, ax or t: \n")
 
+
 class Arm:
     steps = 10
-    default_position = np.array([90, 90, 90, 90, 90, 45], np.float64)
+    step_length = 1 / steps
+    default_position = np.array([90, 90, 90, 90, 90, 45], np.int32)
 
     @staticmethod
     def default_optimization(d1, d2, d3, p):
@@ -23,7 +25,7 @@ class Arm:
     def minimum_change(d1, d2, d3, p):
         return norm(90 - (np.rad2deg(np.array([d1, d2, d3])) - p[:3]), ord=2)
 
-    def __init__(self, r1, r2, r3, opt=default_optimization, implementation="t"):
+    def __init__(self, r1, r2, r3, opt=default_optimization, implementation="ax"):
         """
           :param r1: Length of the first segment
           :param r2: Length of the second segment
@@ -40,14 +42,18 @@ class Arm:
         self.rad_pos = np.array([half_pi, half_pi, half_pi, half_pi, half_pi, pi / 4], dtype=np.float64)
         self.opt = opt
 
+        # Stands for Tom: Hanzhi Zhou's implementation by analytically solve the inequality using algebraic method
         if implementation == "t":
             self.solve_three = self.t_solve_angle
+
+        # Stands for Alex: Yuhao Zhou's implementation by analytically solve the inequality using angles
         elif implementation == "ax":
             self.solve_three = self.ax_solve_angle
+
+        # Stands for Tom Traversal: Hanzhi Zhou's original implementation by traversing all possible values of m
         elif implementation == "tt":
             self.solve_three = self.t_solve_angle
             self.get_m_range = self.get_m_range_traverse
-
 
     def get_radians(self, x, y, z):
         """
@@ -79,7 +85,8 @@ class Arm:
 
     @staticmethod
     def rads_to_degs(rads):
-        return np.round(np.rad2deg(rads))
+        return np.round(np.rad2deg(rads), 0)
+
 
     def t_solve_angle(self, a, b):
         """
@@ -92,20 +99,23 @@ class Arm:
         rs = None
         rg = self.get_m_range(a, b)
         for m in rg:
-            d1 = asin(m / self.r1)
-            n = sqrt(self.r1 ** 2 - m ** 2)
-            temp = (a - m) ** 2 + (b - n) ** 2
-            d2 = half_pi - d1 - acos((self.r2 ** 2 + temp - self.r3 ** 2) / (2 * self.r2 * sqrt(temp))) - atan(
-                (b - n) / (a - m))
-            if not -half_pi < d2 < half_pi:
+            try:
+                d1 = asin(m / self.r1)
+                n = sqrt(self.r1 ** 2 - m ** 2)
+                temp = (a - m) ** 2 + (b - n) ** 2
+                d2 = half_pi - d1 - acos((self.r2 ** 2 + temp - self.r3 ** 2) / (2 * self.r2 * sqrt(temp))) - atan(
+                    (b - n) / (a - m))
+                if not -half_pi < d2 < half_pi:
+                    continue
+                d3 = pi - acos((self.r2 ** 2 + self.r3 ** 2 - temp) / (2 * self.r2 * self.r3))
+                if not -half_pi < d3 < half_pi:
+                    continue
+                opt_val = self.opt(d1, d2, d3, self.position)
+                if opt_val < s:
+                    s = opt_val
+                    rs = d1, d2, d3
+            except:
                 continue
-            d3 = pi - acos((self.r2 ** 2 + self.r3 ** 2 - temp) / (2 * self.r2 * self.r3))
-            if not -half_pi < d3 < half_pi:
-                continue
-            opt_val = self.opt(d1, d2, d3, self.position)
-            if opt_val < s:
-                s = opt_val
-                rs = d1, d2, d3
         return rs
 
     def get_m_range_traverse(self, a, b):
@@ -129,64 +139,39 @@ class Arm:
         temp = a ** 2 + b ** 2
         d1 = 4 * temp * l1 ** 2 - A ** 2
 
-        if d1 > 0:
-            m11 = (-A * a - b * sqrt(d1)) / (2 * temp)
-            m12 = (-A * a + b * sqrt(d1)) / (2 * temp)
+        m11 = 0
+        m12 = 0
+        m21 = 0
+        m22 = 0
 
-        B = A + 2 * l2 * l3
+        if d1 > 0:
+            m11 = int((-A * a - b * sqrt(d1)) / (2 * temp) * Arm.steps)
+            m12 = int((-A * a + b * sqrt(d1)) / (2 * temp) * Arm.steps)
+            # print(m11, m12)
+
+        B = -A - 2 * l2 * l3
         d2 = 4 * temp * l1 ** 2 - B ** 2
 
+        u = int(B / (2 * a) * Arm.steps)
+
         if d2 > 0:
-            m21 = (-B * a - b * sqrt(d2)) / (2 * temp)
-            m22 = (-B * a + b * sqrt(d2)) / (2 * temp)
+            m21 = int((B * a - b * sqrt(d2)) / (2 * temp) * Arm.steps)
+            m22 = int((B * a + b * sqrt(d2)) / (2 * temp) * Arm.steps)
+            # print(m21, m22)
 
-        # find the intersection between [-oo, m11], [m21, m22] and [m12, +oo]
-        if d1 > 0 and d2 > 0:
-            if m12 < m21 or m11 > m22:
-                print(1)
-                return self.process_m_range([m21, m22])
+        # print(u - l1)
 
-            elif m11 < m21 < m12 < m22:
-                print(2)
-                return self.process_m_range([m12, m22])
-
-            elif m21 < m11 and m12 < m22:
-                print(3)
-                return self.process_m_range([m21, m11, m12, m22])
-
-            elif m21 < m11 < m22 < m12:
-                print(4)
-                return self.process_m_range([m21, m11])
-
-            # I guess this isn't possible
-            elif m11 < m21 and m12 > m22:
-                print(5)
-                return []
-
-        elif d1 > 0 and d2 < 0:
-            print(6)
-            return self.process_m_range([-self.l1, m11, m12, self.l1])
-
-        elif d1 < 0 and d2 > 0:
-            print(7)
-            return self.process_m_range([m21, m22])
-
+        if b != 0:
+            first_solutions = set(range(-l1 * Arm.steps, m11)).union(set(range(m12, l1 * Arm.steps)))
+            second_solutions = set(range(m21, m22)).union(set(range(u, l1 * Arm.steps)))
+            return np.array(list(first_solutions.intersection(second_solutions))) / Arm.steps
         else:
-            print(8)
-            return []
+            print(0)
+            m1 = u
+            m2 = -A / (2 * a)
+            return np.arange(m1 + Arm.step_length, m2, Arm.step_length)
 
-    def process_m_range(self, m_range):
-        if len(m_range) == 2:
-            if m_range[0] < -self.r1: m_range[0] = -self.r1
-            if m_range[1] > self.r1: m_range[1] = self.r1
-            return np.arange(m_range[0] + 1 / Arm.steps, m_range[1], 1 / Arm.steps)
-        elif len(m_range) == 4:
-            return np.concatenate((np.arange(m_range[0] + 1 / Arm.steps, m_range[1], 1 / Arm.steps),
-                                 np.arange(m_range[2] + 1 / Arm.steps, m_range[3], 1 / Arm.steps)))
-        else:
-            raise Exception('!!!')
-
-        # For Alex's implementation
+    # For Alex's implementation
     def ax_solve_angle(self, a, b):
         theta_range = self.get_angle_range(a, b)
         s = inf
@@ -250,13 +235,13 @@ class Arm:
         c = np.rad2deg(np.array([angle_1, angle_2]))
         if angle_3 != 0 and angle_4 != 0:
             c = np.concatenate((c, np.rad2deg(np.array([angle_3, angle_4]))), axis=0)
-            for i in range(ceil(10 * c[0]), floor(10 * c[1] + 1)):
-                theta_range.append(i / 10)
-            for i in range(ceil(10 * c[2]), floor(10 * c[3] + 1)):
-                theta_range.append(i / 10)
+            for i in range(ceil(Arm.steps * c[0]), floor(Arm.steps * c[1] + 1)):
+                theta_range.append(i / Arm.steps)
+            for i in range(ceil(Arm.steps * c[2]), floor(Arm.steps * c[3] + 1)):
+                theta_range.append(i / Arm.steps)
         else:
-            for i in range(ceil(10 * c[0]), floor(10 * c[1] + 1)):
-                theta_range.append(i / 10)
+            for i in range(ceil(Arm.steps * c[0]), floor(Arm.steps * c[1] + 1)):
+                theta_range.append(i / Arm.steps)
 
         return theta_range
 
@@ -281,7 +266,8 @@ class Arm:
     # Update the joint angles so that the arm can reach (x, y, z)
     def goto(self, x, y, z):
         self.rad_pos = self.get_radians(x, y, z)
-        self.position = np.concatenate((self.cov_degs(self.rads_to_degs(self.rad_pos)), self.position[4:]), axis=0)
+        self.position = np.concatenate((self.cov_degs(self.rads_to_degs(self.rad_pos)), self.position[4:]), axis=0).astype(np.int32)
+
 
     # get coordinates of each joint in three dimensional space
     def get_coordinates(self):
@@ -301,7 +287,8 @@ class Arm:
     def write(self, sr):
         sr.write(self.position)
 
-write_serial = False
+
+write_serial = True
 if write_serial:
     from Protocol import ServoProtocol
 
@@ -336,7 +323,7 @@ def update(n, t):
     callback(1)
 
 
-arm = Arm(93, 87, 139, Arm.default_optimization, implementation)
+arm = Arm(93, 87, 139, Arm.minimum_change, implementation)
 
 fig = plt.figure()
 ax = Axes3D(fig)
@@ -351,7 +338,7 @@ root.title('Robotic Arm Control Simulation')
 
 sx = Scale(root, from_=0, to_=300, orient=HORIZONTAL, length=600, command=lambda t: update(1, t))
 sy = Scale(root, from_=0, to_=300, orient=HORIZONTAL, length=600, command=lambda t: update(2, t))
-sz = Scale(root, from_=0, to_=300, orient=HORIZONTAL, length=600, command=lambda t: update(3, t))
+sz = Scale(root, from_=-20, to_=300, orient=HORIZONTAL, length=600, command=lambda t: update(3, t))
 
 sx.bind('<ButtonRelease-1>', callback)
 sy.bind('<ButtonRelease-1>', callback)
